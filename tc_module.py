@@ -509,7 +509,7 @@ def plot_tc_compare(wvar_tc,
                     clu_id=[],
                     surr=False,
                     cluster=True):
-    ''' Plot tc for single recorgind
+    ''' Plot tc for single recording; compare pre- and post-drop periods
     '''
     # pdb.set_trace()
     cluster = True                # Color code tc by cluster
@@ -1576,37 +1576,54 @@ def run_tc(drop_rec=[0, 10, 15, 16, 25],
     
     # pdb.set_trace()
     if save_data:               # either compute and save data...
-        if not surr:
-            runtimes = 1
+        # Run for normal data (not shuffled/surrogate)
+        save_wvar_tc = []
+        save_wvar_tc_m = []
+        save_tot_spkcount = []
+        save_cidsSorted = []
+        save_wvar_hist = []
+        save_path = []
+        for idx, rec_idx in enumerate(good_list):
+            # Compute firing rate per wvar bin
+            wvar_tc, wvar_tc_m, tot_spkcount, cidsSorted, wvar_hist, path = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=False, pre=pre, pethdiscard=pethdiscard)
 
-        for run in range(runtimes):
-            save_wvar_tc = []
-            save_wvar_tc_m = []
-            save_tot_spkcount = []
-            save_cidsSorted = []
-            save_wvar_hist = []
-            save_path = []
-            for idx, rec_idx in enumerate(good_list):
-                # Compute firing rate per wvar bin
-                wvar_tc, wvar_tc_m, tot_spkcount, cidsSorted, wvar_hist, path = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=surr, pre=pre, pethdiscard=pethdiscard)
+            # Save data for each rec
+            save_wvar_tc.append(wvar_tc)
+            save_wvar_tc_m.append(wvar_tc_m)
+            save_tot_spkcount.append(tot_spkcount)
+            save_cidsSorted.append(cidsSorted)
+            save_wvar_hist.append(wvar_hist)
+            save_path.append(path)
 
-                # Save data for each rec
-                save_wvar_tc.append(wvar_tc)
-                save_wvar_tc_m.append(wvar_tc_m)
-                save_tot_spkcount.append(tot_spkcount)
-                save_cidsSorted.append(cidsSorted)
-                save_wvar_hist.append(wvar_hist)
-                save_path.append(path)
+        # Save in .pickle
+        save_all_tc_nowhisk = [save_wvar_tc, save_wvar_tc_m, save_tot_spkcount, save_cidsSorted, save_wvar_hist, save_path]
+        with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk.pickle', 'wb') as f:
+            pickle.dump(save_all_tc_nowhisk, f)
+        # Run again for surr=True
+        if surr:
+            for run in range(runtimes):
+                save_wvar_tc_s = []
+                save_wvar_tc_m_s = []
+                save_tot_spkcount_s = []
+                save_cidsSorted_s = []
+                save_wvar_hist_s = []
+                save_path_s = []
+                for idx, rec_idx in enumerate(good_list):
+                    # Compute firing rate per wvar bin
+                    wvar_tc_s, wvar_tc_m_s, tot_spkcount_s, cidsSorted_s, wvar_hist_s, path_s = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=True, pre=pre, pethdiscard=pethdiscard)
 
-            # Save in .pickle
-            save_all_tc_nowhisk = [save_wvar_tc, save_wvar_tc_m, save_tot_spkcount, save_cidsSorted, save_wvar_hist, save_path]
-            if not surr:
-                with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk.pickle', 'wb') as f:
-                    pickle.dump(save_all_tc_nowhisk, f)
-            else:
+                    # Save data for each rec
+                    save_wvar_tc_s.append(wvar_tc_s)
+                    save_wvar_tc_m_s.append(wvar_tc_mv)
+                    save_tot_spkcount_s.append(tot_spkcount_s)
+                    save_cidsSorted_s.append(cidsSorted_s)
+                    save_wvar_hist_s.append(wvar_hist_s)
+                    save_path_s.append(path_s)
+
+                # Save in .pickle
+                save_all_tc_nowhisk_surr = [save_wvar_tc_s, save_wvar_tc_m_s, save_tot_spkcount_s, save_cidsSorted_s, save_wvar_hist_s, save_path_s]
                 with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk_shuffle{run}.pickle', 'wb') as f:
-                    pickle.dump(save_all_tc_nowhisk, f)
-                
+                    pickle.dump(save_all_tc_nowhisk_surr, f)                
 
     else: # load data
         if not var=='phase':
@@ -1895,50 +1912,83 @@ def run_tc_compare(drop_rec=[0, 10, 15, 16, 25],
     good_list = good_list[wmask2]
 
     if save_data:               # either compute and save data...
-        if not surr:
-            runtimes = 1
+        # Run for normal data (not shuffled/surrogate)
+        save_wvar_tc = []
+        save_wvar_tc_m = []
+        save_tot_spkcount = []
+        save_cidsSorted = []
+        save_wvar_hist = []
+        save_path = []
+        for idx, rec_idx in enumerate(good_list):
+            wvar_tc = []
+            wvar_tc_m = []
+            tot_spkcount = []
+            cidsSorted = []
+            wvar_hist = []
+            path = []
+            for time in [True, False]:
+                # Compute firing rate per wvar bin (pre and post t_drop)
+                pre = time
+                wvar_tc_, wvar_tc_m_, tot_spkcount_, cidsSorted_, wvar_hist_, path_ = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=False, pre=pre, pethdiscard=pethdiscard)
+                wvar_tc.append(wvar_tc_)
+                wvar_tc_m.append(wvar_tc_m_)
+                tot_spkcount.append(tot_spkcount_)
+                cidsSorted.append(cidsSorted_)
+                wvar_hist.append(wvar_hist_)
+                path.append(path_)
 
-        for run_ in range(runtimes):
-            save_wvar_tc = []
-            save_wvar_tc_m = []
-            save_tot_spkcount = []
-            save_cidsSorted = []
-            save_wvar_hist = []
-            save_path = []
-            for idx, rec_idx in enumerate(good_list):
-                wvar_tc = []
-                wvar_tc_m = []
-                tot_spkcount = []
-                cidsSorted = []
-                wvar_hist = []
-                path = []
-                for time in [True, False]:
-                    # Compute firing rate per wvar bin (pre and post t_drop)
-                    pre = time
-                    wvar_tc, wvar_tc_m, tot_spkcount, cidsSorted, wvar_hist, path = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=surr, pre=pre, pethdiscard=pethdiscard)
-                    wvar_tc.append(wvar_tc)
-                    wvar_tc_m.append(wvar_tc_m)
-                    tot_spkcount.append(tot_spkcount)
-                    cidsSorted.append(cidsSorted)
-                    wvar_hist.append(wvar_hist)
-                    path.append(path)
+            # Save data for each rec
+            save_wvar_tc.append(wvar_tc)
+            save_wvar_tc_m.append(wvar_tc_m)
+            save_tot_spkcount.append(tot_spkcount)
+            save_cidsSorted.append(cidsSorted)
+            save_wvar_hist.append(wvar_hist)
+            save_path.append(path)
 
-                # Save data for each rec
-                save_wvar_tc.append(wvar_tc)
-                save_wvar_tc_m.append(wvar_tc_m)
-                save_tot_spkcount.append(tot_spkcount)
-                save_cidsSorted.append(cidsSorted)
-                save_wvar_hist.append(wvar_hist)
-                save_path.append(path)
+        # Save in .pickle
+        save_all_tc_nowhisk = [save_wvar_tc, save_wvar_tc_m, save_tot_spkcount, save_cidsSorted, save_wvar_hist, save_path]
+        with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk_compare.pickle', 'wb') as f:
+            pickle.dump(save_all_tc_nowhisk, f)
+            
+        if surr:
+            for run_ in range(runtimes):
+                save_wvar_tc_s = []
+                save_wvar_tc_m_s = []
+                save_tot_spkcount_s = []
+                save_cidsSorted_s = []
+                save_wvar_hist_s = []
+                save_path = []
+                for idx, rec_idx in enumerate(good_list):
+                    wvar_tc_s = []
+                    wvar_tc_m_s = []
+                    tot_spkcount_s = []
+                    cidsSorted_s = []
+                    wvar_hist_s = []
+                    path = []
+                    for time in [True, False]:
+                        # Compute firing rate per wvar bin (pre and post t_drop)
+                        pre = time
+                        wvar_tc_s_, wvar_tc_m_s_, tot_spkcount_s_, cidsSorted_s_, wvar_hist_s_, path_s_ = tc_fun(rec_idx, fxb=fxb, whisking=whisking, cgs=cgs, var=var, w_bin=w_bin, surr=True, pre=pre, pethdiscard=pethdiscard)
+                        wvar_tc_s.append(wvar_tc_s_)
+                        wvar_tc_m_s.append(wvar_tc_m_s_)
+                        tot_spkcount_s.append(tot_spkcount_s_)
+                        cidsSorted.append(cidsSorted_)
+                        wvar_hist.append(wvar_hist_)
+                        path.append(path_)
 
-            # Save in .pickle
-            save_all_tc_nowhisk = [save_wvar_tc, save_wvar_tc_m, save_tot_spkcount, save_cidsSorted, save_wvar_hist, save_path]
-            if not surr:
-                with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk_compare.pickle', 'wb') as f:
-                    pickle.dump(save_all_tc_nowhisk, f)
-            else:
+                    # Save data for each rec
+                    save_wvar_tc_s.append(wvar_tc_s)
+                    save_wvar_tc_m_s.append(wvar_tc_m_s)
+                    save_tot_spkcount_s.append(tot_spkcount_s)
+                    save_cidsSorted_s.append(cidsSorted_s)
+                    save_wvar_hist_s.append(wvar_hist_s)
+                    save_path_s.append(path_s)
+
+                # Save in .pickle
+                save_all_tc_nowhisk_s = [save_wvar_tc_s, save_wvar_tc_m_s, save_tot_spkcount_s, save_cidsSorted_s, save_wvar_hist_s, save_path_s]
                 with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_all_data_nowhisk_compare_shuffle{run_}.pickle', 'wb') as f:
-                    pickle.dump(save_all_tc_nowhisk, f)
+                    pickle.dump(save_all_tc_nowhisk_s, f)
+
                 
 
     else: # load data
@@ -2300,7 +2350,7 @@ if __name__ == '__main__':
     cgs = 2
     var = 'angle'
     w_bin = 11
-    surr = False
+    surr = True
     pre = None                  # Use to get whole rec
     # pre = 'PrePost'               # Get both pre and post data
     if not pre:
