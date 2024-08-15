@@ -48,12 +48,11 @@ def plot_wskspk(rec_idx, whisker='whisk2', t_wind=[-2, 3], var='angle', cgs=2, s
     conditions = conditions[rec_idx]
     clu_idx = clu_idx[rec_idx]
     bout_idxs = bout_idxs[rec_idx]
-    pdb.set_trace()
     clu_idx = []
     # wsknpx_data contains: whiskd, spktr_sorted, cids_sorted, a_wvar, a_wvar_m, a_spktr, a_spktr_m
     wsknpx_data = align_spktrain(wskpath, npxpath, cortex_depth, cgs=cgs, t_wind=t_wind, var=var, surr=surr, t_drop=t_drop, pre=pre, clu_idx=clu_idx, discard=discard)
     clu_idx = wsknpx_data.cids_sorted
-    pdb.set_trace()
+    # pdb.set_trace()
     # Plot
     # Initialise parameters for figures
     sr = wsknpx_data.whiskd.sr
@@ -164,7 +163,7 @@ if __name__ == '__main__':
     var = 'angle'
     # var = 'setpoint'
     # var = 'amplitude'           # which whisker var "" ""
-    cgs = 2
+    cgs = 2                     # specify type of clusters to use (2=good, 1=mua, 0=bad)
     surr = False
     # surr = 'shuffle'
     pre = None
