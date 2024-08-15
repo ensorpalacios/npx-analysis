@@ -1,0 +1,107 @@
+\documentclass{article}
+
+% Page size
+\usepackage{geometry}
+% \geometry{
+%   \left=1cm,
+%   \right=1cm}
+ \geometry{
+   lmargin= 5mm,
+   rmargin = 5mm,
+   top = 5mm,
+   bottom = 5mm,
+ }
+
+% For table
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{caption}
+
+\usepackage[table]{xcolor}
+\definecolor{mypink}{RGB}{253,211,220}
+\definecolor{myblue}{RGB}{183,201,226}
+\definecolor{mygreen}{RGB}{195,236,212}
+
+\begin{document}
+
+%{\setlength\tabcolsep{3.pt} % default value: 6pt
+  \begin{longtable}{|c|c|c|c|c|c|c|}
+    \captionsetup{width=.8\linewidth}
+    \hline
+    Recording &  Animal  &   Strain   &   Drug   &  Whisking  & \# cortical units & \makecell{Time CNO/PBS \\ drop (min)}\\
+    \hline
+    \hline
+    \rowcolor{mypink}1 & 1 & GlyT2 & CNO & poor & 18 & 10\\
+    \hline
+    \rowcolor{mypink}2 & 1 & GlyT2 & CNO & good & 5 (4) & 10\\
+    \hline
+    \rowcolor{mypink}3 & 2 & GlyT2 & CNO & good & 8 (7) & 10\\
+    \hline
+    \rowcolor{mypink}4 & 2 & GlyT2 & CNO & good & 12 (11) & 10\\
+    \hline
+    \rowcolor{mypink}5 & 3 & GlyT2 & CNO & good & 10 & 10\\
+    \hline
+    \rowcolor{mypink}6 & 3 & GlyT2 & CNO & good & 10 (6) & 10\\
+    \hline
+    \rowcolor{mypink}7 & 4 & GlyT2 & CNO & good & 8  & 20\\
+    \hline
+    \rowcolor{mypink}8 & 5 & GlyT2 & CNO & absent & 27  & 20\\
+    \hline
+    \rowcolor{mypink}9 & 6 & GlyT2 & CNO & good & 61  & 20\\
+    \hline
+    \rowcolor{mypink}10 & 7 & GlyT2 & CNO & good & 76  & 20\\
+    \hline
+    \rowcolor{mypink}11 & 7 & GlyT2 & CNO & good & 24  & 20\\
+    \hline
+    \rowcolor{mypink}12 & 8 & GlyT2 & CNO & absent & 5  & 20\\
+    \hline
+    \rowcolor{mypink}13 & 8 & GlyT2 & CNO & poor & 30  & 20\\
+    \hline
+    \rowcolor{mypink}14 & 9 & GlyT2 & CNO & good & 58  & 20\\
+    \hline
+    \rowcolor{mypink}15 & 9 & GlyT2 & CNO & good & 23  & 20\\
+    \hline
+    \rowcolor{mypink}16 & 10 & GlyT2 & CNO & good & 46  & 20\\
+    \hline
+    \rowcolor{mypink}17 & 10 & GlyT2 & CNO & good & 49  & 20\\
+    \hline
+    \rowcolor{mypink}18 & 11 & GlyT2 & CNO & poor & 9  & 20\\
+    \hline
+    \rowcolor{mypink}19 & 11 & GlyT2 & CNO & poor & 29  & 20\\
+    \hline
+    \rowcolor{myblue}20 & 12 & WT & CNO & good & 96 (88)  & 10\\
+    \hline
+    \rowcolor{myblue}21 & 13 & WT & CNO & good & 28  & 20\\
+    \hline
+    \rowcolor{myblue}22 & 13 & WT & CNO & good & 31  & 20\\
+    \hline
+    \rowcolor{myblue}23 & 14 & WT & CNO & good & 14  & 20\\
+    \hline
+    \rowcolor{myblue}24 & 14 & WT & CNO & good & 55 (54)  & 20\\
+    \hline
+    \rowcolor{mygreen}25 & 4 & GlyT2 & PBS & good & 8  & 20\\
+    \hline
+    \rowcolor{mygreen}26 & 5 & GlyT2 & PBS & absent & 23  & 20\\
+    \hline
+    \rowcolor{mygreen}27 & 6 & GlyT2 & PBS & good & 31  & 20\\
+    \hline
+    \rowcolor{mygreen}28 & 15 & WT & PBS & good & 88  & 20\\
+    \hline
+    \rowcolor{mygreen}29 & 15 & WT & PBS & poor & 38  & 20\\
+    \hline
+    \rowcolor{mygreen}30 & 16 & WT & PBS & good & 61  & 20\\
+    \hline
+    \rowcolor{mygreen}31 & 16 & WT & PBS & good & 28  & 20\\
+    \hline
+    \rowcolor{mygreen}32 & 17 & WT & PBS & good & 52  & 20\\
+    \hline
+    \rowcolor{mygreen}33 & 17 & WT & PBS & good & 25  & 20\\
+    \hline
+    \caption[Neuronal and behavioural data]{Neuronal and behavioural data. Each animal underwent two recordings (except animal 12). Each recording was performed on either GlyT2 or WT (wild-type) mice; GlyT2 mice expressed Cre-recombinase selectively in Golgi cells in the cerebellar cortex, and therefore only in these mice CNO could selectively decrease Golgi cell inhibition. The three experimental conditions are called `GlyT2+CNO', in which CNO was used on GlyT2 mice, `WT+CNO' in which CNO was used on WT mice, and `vehicle', in which PBS was used on either injected GlyT2 mice (3 recordings) or WT mice (6 recordings); the `WT+CNO' and `vehicle' conditions were pooled into one `control' condition, after assessing for the specific effect of our manipulation on total cerebellar cortical spike counts using the statistical model described in equations 1-4. For this statistical analysis of spike counts, we used all units from all recordings (n=1086 units, N=33 recordings). In all other analyses, instead, we excluded recordings with absent/poor whisking activity (n=25 left after exclusion), as the analyses required concomitant behavioural and neuronal information; for the same reason, we additionally excluded a small number of units (n=16, remaining number of units in parenthesis) whose activity was absent or too sparse during whisking periods in order to compute the peri-event time histogram. Poor whisking behaviour was defined as a flat trial-averaged whisker position trace for either or both pre- and post- drop periods, as shown in Figure5a.}
+    \label{tab:data}
+  \end{longtable}
+  % } % end of scope of "\setlength\tabcolsep{3.5pt} "
+
+  
+
+\end{document}
