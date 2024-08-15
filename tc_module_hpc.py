@@ -1,6 +1,12 @@
 """
 Script to fit spline model to all pre and post drop tc on hpc. Load pre-computed
 tc and fit model to each tc.
+
+ATTENTION(1)1: run from high performace computer; run script from shell with argument
+from 0-24, one for each recording.
+
+ATTENTION(2): requires first generation of tc_all_data_nowhisk_compare.pickle file,
+containing raw tuning curves (from tc_module.run_tc_compare)
 """
 import sys
 import os
@@ -126,6 +132,7 @@ def run_fit_tc(rec_fit, w_bin=11):
 
 
 if __name__ == '__main__':
-    """ Run script from python shell
+    """ Run script from python shell; argument is 0-24, one
+    for each recording
     """
     run_fit_tc(sys.argv[1])
