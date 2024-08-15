@@ -1,6 +1,8 @@
 # npx-analysis
 
-This repository contains the code used for the analysis contained in Palacios et al., bioRxiv, 2024, 'Golgi cells regulate timing and variability of information transfer in the cerebellar-behavioural loop'
+This repository contains the code used for the analysis contained in Palacios et al., bioRxiv, 2024, [Golgi cells regulate timing and variability of information transfer in the cerebellar-behavioural loop]
+
+[Golgi cells regulate timing and variability of information transfer in the cerebellar-behavioural loop]:https://www.biorxiv.org/content/10.1101/2024.07.10.602852v1.full.pdf
 
 # Organisation
 There are four basic modules: the first two, load_npx.py and whisk_analysis.py, are used to pre-process npx and video data, respectively; the former works on the output of [Kilosort 2] and [Phy2], the latter uses the output of [DeepLabCut] to derive whisking periods and properties (e.g., angle) from whisker landmarks. The third module, meta_data.py, contains metadata such as the paths to npx and video data as well as other information necessary for analysis. The fourth module, align_fun.py, is responsible for aligning neuronal and whisking data, and its functions are used in other modules.
