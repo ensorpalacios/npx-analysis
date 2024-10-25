@@ -188,9 +188,9 @@ catgt_EP_WT_220609_B_g0']
         consider ml with depth 200μm, tip length 175
         '''
         if not tip:
-            end_of_ml = 3840 - (3840 - x) - 201
+            end_of_ml = x - 201
         else:
-            end_of_ml = 3840 - (3840 - x) - 201 - 175
+            end_of_ml = x - 201 - 175
         return end_of_ml
 
     mli_depth_mus = [0, 0, 0]

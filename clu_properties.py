@@ -21,7 +21,9 @@ import arviz as az
 import matplotlib.pyplot as plt
 import matplotlib
 import pickle
-
+import scipy.linalg as la
+from scipy.stats import zscore
+from sklearn.manifold import TSNE
 
 def fr_count(spktr_array, iswhisking, tdrop, sr=299):
     """ Compute firing rate for each cluster during whisking and resting
@@ -61,21 +63,26 @@ def fr_count(spktr_array, iswhisking, tdrop, sr=299):
     
     return spktr_fr
 
-def fr_count_alltime(spktr_array, sr=299):
+
+def fr_count_alltime(spktr_array, iswhisking, sr=299):
     """ Compute instantaneous fr for all recording (used later only for
-    control data).
+    control data); only focus on non-whisking
     """
+    iswhisking_mask = np.where(iswhisking==1, True, False)
+    mask = iswhisking_mask.copy()
+
+    spktr_array = spktr_array[:, mask]
     spktr_fr = np.cumsum(spktr_array, axis=1)
     spktr_fr = spktr_fr[:, sr::sr] - spktr_fr[:, :-sr:sr]
     spktr_fr = spktr_fr.mean(axis=1)
     spktr_fr = pd.DataFrame(spktr_fr)
-
+    
     return spktr_fr
 
 
 def clu_autocorr(spktr_array, window=200):
     """ Compute autocorrelation of spike counts for each cluster;
-    window has units=1 frame (~3.3 msec); manually sec convolution=0
+    window has units=1 msec; manually sec convolution=0
     for time lag=0.
     """
     df_autocorr = pd.DataFrame()
@@ -88,6 +95,278 @@ def clu_autocorr(spktr_array, window=200):
         df_autocorr = pd.concat([df_autocorr, __], axis=0)
 
     return df_autocorr
+
+
+def autocorr_pca(data, varexp=70):
+    """ Reduce single-cluster autocorrelograms to n principal components (projections onto n
+    eigenvectors of lag correlation matrix); n is given by the number of eigenvalues that
+    together reach <=varexp% variance explained.
+    """
+    # Compute correlation matrix
+    autocorr_z = data.loc['control'].copy()
+    autocorr_z = autocorr_z.T.apply(zscore).T
+    corr = autocorr_z.corr(method='pearson')
+    # plt.imshow(corr)
+    # plt.show()
+    # Compute egnval and egvec and sort
+    egnval, egnvec = la.eig(corr)
+    idxsort = np.argsort(egnval.real)[::-1]
+    egnval = egnval.real[idxsort]
+    egnvec = egnvec[:, idxsort]
+
+    # Project and retain for varexp evariance explained
+    n_egvec = (np.cumsum(egnval)/np.cumsum(egnval)[-1] <= varexp/100).sum()
+    project = np.dot(autocorr_z, egnvec[:, :n_egvec])
+
+    # Put in df
+    colnames = pd.MultiIndex(levels=[range(n_egvec)], codes=[range(n_egvec)], names=['pc'])
+    project = pd.DataFrame(project, index=autocorr_z.index, columns=colnames)
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.scatter(project[:, 0], project[:, 1], project[:, 2])
+    # plt.show()
+
+    return project, egnvec[:, :n_egvec]
+
+
+def isi_calc(data):
+    isi_mean = []
+    isi_median = []
+    isi_mode = []
+    isi_std = []
+    isi_logcv = []
+    
+    for idx_clu, clu_spk in enumerate(data):
+        spk_time = np.argwhere(clu_spk)
+        clu_isi = np.diff(spk_time[:, 0])
+        isi_hist = np.histogram(clu_isi, bins=np.arange(0, 1000, 1))
+        isi_mean.append(clu_isi.mean())
+        isi_median.append(np.median(clu_isi))
+        isi_mode.append(np.argmax(isi_hist[0]) + 1)  # idx starts at 0
+        isi_std.append(np.std(isi_hist[0]))
+        isi_logcv.append(np.std(np.log(clu_isi))/np.mean(np.log(clu_isi)))
+        
+    isi_mean = pd.DataFrame(isi_mean)
+    isi_median = pd.DataFrame(isi_median)
+    isi_mode = pd.DataFrame(isi_mode)
+    isi_std = pd.DataFrame(isi_std)
+    isi_logcv = pd.DataFrame(isi_logcv)
+        
+    return isi_mean, isi_median, isi_mode, isi_std, isi_logcv
+
+
+def reduce_prop(data, data_mli_depth, data_good_list, saveplot=True):
+    """ Project properties in 3d space (T-SNE or multiple combinations);
+    color code MLI based on location (200μm depth); only control rec.
+    Project MLI in T-SNE as well.
+    """
+    pdb.set_trace()
+    # Load tc
+    with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_labeled_control.pickle', 'rb') as f:
+        tc_labeled_control = pickle.load(f)
+      
+    # Combine prop for visualisation
+    fr_data = data['fr_nowhisk'].loc['control']
+    acorr_pc_data = data['autocorr_pc']
+    isi_mean_data = data['isi_mean'].loc['control']
+    isi_median_data = data['isi_median'].loc['control']
+    isi_mode_data = data['isi_mode'].loc['control']
+    isi_std_data = data['isi_std'].loc['control']
+    isi_logcv_data = data['isi_logcv'].loc['control']
+    df_all_prop = pd.concat([fr_data, acorr_pc_data, isi_mean_data, isi_median_data, isi_mode_data, isi_std_data, isi_logcv_data], keys=['fr', 'pc', 'isi_mean', 'isi_median', 'isi_mode', 'isi_std', 'isi_logcv'], axis=1)
+
+    # # Plot properties
+    # fig_fr, ax_fr = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'fr'], ax=ax_fr)
+    # ax_fr.set_xlabel('Hz')
+    # fig_fr.suptitle('fr')
+
+    # fig_pc, ax_pc = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'pc'], ax=ax_pc)
+    # ax_fr.set_xlabel('pc units')
+    # fig_pc.suptitle('pc')
+
+    # fig_isimean, ax_isimean = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'isi_mean'], ax=ax_isimean)
+    # ax_isimean.set_xlabel('ms')
+    # fig_isimean.suptitle('isi mean')
+
+    # fig_isimedian, ax_isimedian = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'isi_median'], ax=ax_isimedian)
+    # ax_isimedian.set_xlabel('ms')
+    # fig_isimedian.suptitle('isi median')
+
+    # fig_isimode, ax_isimode = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'isi_mode'], ax=ax_isimode)
+    # ax_isimode.set_xlabel('ms')
+    # fig_isimode.suptitle('isi mode')
+
+    # fig_isistd, ax_isistd = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'isi_std'], ax=ax_isistd)
+    # ax_isistd.set_xlabel('std units')
+    # fig_isistd.suptitle('isi std')
+
+    # fig_isilogcv, ax_isilogcv = plt.subplots()
+    # sns.histplot(df_all_prop.loc[:, 'isi_logcv'], ax=ax_isilogcv)
+    # ax_isilogcv.set_xlabel('log cv')
+    # fig_isilogcv.suptitle('isi log cv')
+
+    # Standardise for t-sne
+    df_all_prop = df_all_prop.apply(zscore)
+
+    # T-sne (2d)
+    df_2embedded5 = TSNE(n_components=2, random_state=0, perplexity=5).fit_transform(df_all_prop)
+    df_2embedded30 = TSNE(n_components=2, random_state=0, perplexity=30).fit_transform(df_all_prop)
+    df_2embedded50 = TSNE(n_components=2, random_state=0, perplexity=50).fit_transform(df_all_prop)
+    
+    df_3embedded5 = TSNE(n_components=3, random_state=0, perplexity=5).fit_transform(df_all_prop)
+    df_3embedded30 = TSNE(n_components=3, random_state=0, perplexity=30).fit_transform(df_all_prop)
+    df_3embedded50 = TSNE(n_components=3, random_state=0, perplexity=50).fit_transform(df_all_prop)
+
+    # MLI depth
+    df_mli_depth = pd.DataFrame(data_mli_depth).iloc[data_good_list] # select rec
+    df_mli_depth.index = data['depth'].index.droplevel(2).unique() # set multilevel index
+    mask_mli = data['depth'].merge(df_mli_depth, on=['cond', 'rec']).loc['control'] # join with depth dataframe
+    mask_mli = mask_mli.diff(periods=-1, axis=1).iloc[:, 0] # diff depth and start ml (0 is tip)
+    mask_mli.where((mask_mli<0).values, 1, inplace=True)    # negative val are below ml
+    mask_mli.where((mask_mli>=0).values, 0, inplace=True)    # positive val are in ml
+
+    # Homo/Heterogeneity within mli
+    df_mli = df_all_prop.iloc[(mask_mli == 1).values, :].copy()
+
+    # T-SNE MLI
+    df_3embedded5_mli = TSNE(n_components=3, random_state=0, perplexity=5).fit_transform(df_mli)
+    df_3embedded30_mli = TSNE(n_components=3, random_state=0, perplexity=30).fit_transform(df_mli)
+    df_3embedded50_mli = TSNE(n_components=3, random_state=0, perplexity=50).fit_transform(df_mli)
+    pdb.set_trace()
+
+    # Plots
+    # T-SNE perplexity 5
+    fig12, ax12 = plt.subplots()
+    ax12.scatter(df_2embedded5[:, 0], df_2embedded5[:, 1], c=mask_mli)
+    fig12.suptitle('perplexity 5')
+
+    fig13 = plt.figure()
+    ax13 = fig13.add_subplot(projection='3d')
+    ax13.scatter(df_3embedded5[:, 0], df_3embedded5[:, 1], df_3embedded5[:, 2], c=mask_mli)
+    fig13.suptitle('perplexity 5')
+
+    # T-SNE perplexity 5
+    fig22, ax22 = plt.subplots()
+    ax22.scatter(df_2embedded30[:, 0], df_2embedded30[:, 1], c=mask_mli)
+    fig22.suptitle('perplexity 30')
+
+    
+    fig23 = plt.figure()
+    ax23 = fig23.add_subplot(projection='3d')
+    ax23.scatter(df_3embedded30[:, 0], df_3embedded30[:, 1], df_3embedded30[:, 2], c=mask_mli)
+    fig23.suptitle('perplexity 30')
+
+    # T-SNE perplexity 5
+    fig32, ax32 = plt.subplots()
+    ax32.scatter(df_2embedded50[:, 0], df_2embedded50[:, 1], c=mask_mli)
+    fig32.suptitle('perplexity 50')
+
+    
+    fig33 = plt.figure()
+    ax33 = fig33.add_subplot(projection='3d')
+    ax33.scatter(df_3embedded50[:, 0], df_3embedded50[:, 1], df_3embedded50[:, 2], c=mask_mli)
+    fig33.suptitle('perplexity 50')
+
+    fig_mli5 = plt.figure()
+    ax_mli5 = fig_mli5.add_subplot(projection='3d')
+    ax_mli5.scatter(df_3embedded5_mli[:, 0], df_3embedded5_mli[:, 1], df_3embedded5_mli[:, 2])
+    fig_mli5.suptitle('perplexity 5')
+
+    fig_mli30 = plt.figure()
+    ax_mli30 = fig_mli30.add_subplot(projection='3d')
+    ax_mli30.scatter(df_3embedded30_mli[:, 0], df_3embedded30_mli[:, 1], df_3embedded30_mli[:, 2])
+    fig_mli30.suptitle('perplexity 30')
+
+    fig_mli50 = plt.figure()
+    ax_mli50 = fig_mli50.add_subplot(projection='3d')
+    ax_mli50.scatter(df_3embedded50_mli[:, 0], df_3embedded50_mli[:, 1], df_3embedded50_mli[:, 2])
+    fig_mli50.suptitle('perplexity 50')
+
+    # Plot kmeans tc cluster distribution for mli (8 clusters)
+    tc_mli = tc_labeled_control.loc[(7)].iloc[np.where(mask_mli>0, True, False), :]
+
+    fig_mli_hist, ax_mli_hist = plt.subplots()
+    sns.histplot(tc_mli.index.get_level_values(2) + 1, ax=ax_mli_hist, discrete=True)    
+    ax_mli_hist.set_xlabel('tc cluster')
+
+#     fig_mli_tc, ax_mli_tc = plt.subplots(8)
+#     for idx_mli in range(8):
+#         fig_mli_tc, ax_mli_tc = plt.subplots()
+#         sns.barplot(tc_mli.loc[(slice(None), slice(None), idx_mli)], ax=ax_mli_tc)
+#         # sns.barplot(tc_mli.loc[(slice(None), slice(None), idx_mli)], ax=ax_mli_tc[idx_mli])
+# #        ax_mli_tc[idx_mli].bar(range(11), tc_mli.loc[(slice(None), slice(None), idx_mli)])
+        
+#     plt.show()
+    
+
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.scatter(df_all_prop.iloc[:, 7], df_all_prop.iloc[:, 8], df_all_prop.iloc[:, 9])
+    # plt.show()
+
+    # df_all_prop.max(axis=0)
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.scatter(df_all_prop.iloc[:, 1], df_all_prop.iloc[:, 2], df_all_prop.iloc[:, 3])
+    # plt.show()
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.scatter(df_all_prop.iloc[:, 0], df_all_prop.iloc[:, 1], df_all_prop.iloc[:, 7])
+    # plt.show()
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.scatter(df_all_prop.iloc[:, 0], df_all_prop.iloc[:, 7], df_all_prop.iloc[:, 8])
+    # plt.show()
+
+
+    # for idx, egn in enumerate(data['acorr_egnvec']):
+    #     pd.DataFrame(data['acorr_egnvec'][:, idx]).plot()
+    #     plt.show()
+
+        # Save figure
+    if saveplot:
+        if os.path.basename(os.getcwd()) != 'data_analysis':
+            os.chdir('./data_analysis')
+        try:
+            fig12.savefig(os.getcwd() + '/images/clu_properties/tsne5_2d.svg', format='svg')
+            fig13.savefig(os.getcwd() + '/images/clu_properties/tsne5_3d.svg', format='svg')
+            fig22.savefig(os.getcwd() + '/images/clu_properties/tsne30_2d.svg', format='svg')
+            fig23.savefig(os.getcwd() + '/images/clu_properties/tsne30_3d.svg', format='svg')
+            fig32.savefig(os.getcwd() + '/images/clu_properties/tsne50_2d.svg', format='svg')
+            fig33.savefig(os.getcwd() + '/images/clu_properties/tsne50_3d.svg', format='svg')
+            fig_mli5.savefig(os.getcwd() + '/images/clu_properties/tsne5_3d_mli.svg', format='svg')
+            fig_mli30.savefig(os.getcwd() + '/images/clu_properties/tsne30_3d_mli.svg', format='svg')
+            fig_mli50.savefig(os.getcwd() + '/images/clu_properties/tsne50_3d_mli.svg', format='svg')
+            fig_mli_hist.savefig(os.getcwd() + '/images/clu_properties/mli_tc_hist.svg', format='svg')
+            fig_mli_hist.savefig(os.getcwd() + '/images/clu_properties/mli_tc_hist.svg', format='svg')
+            # fig_mli_hist.savefig('/home/yq18021/Documents/github_gcl/data_analysis/images/clu_properties/mli_tc_hist.svg', format='svg')
+        except FileNotFoundError:
+            print('created dir /images/clu_properties')
+            os.makedirs(os.getcwd() + '/images/clu_properties')
+            fig12.savefig(os.getcwd() + '/images/clu_properties/tsne5_2d.svg', format='svg')
+            fig13.savefig(os.getcwd() + '/images/clu_properties/tsne5_3d.svg', format='svg')
+            fig22.savefig(os.getcwd() + '/images/clu_properties/tsne30_2d.svg', format='svg')
+            fig23.savefig(os.getcwd() + '/images/clu_properties/tsne30_3d.svg', format='svg')
+            fig32.savefig(os.getcwd() + '/images/clu_properties/tsne50_2d.svg', format='svg')
+            fig33.savefig(os.getcwd() + '/images/clu_properties/tsne50_3d.svg', format='svg')
+            fig_mli5.savefig(os.getcwd() + '/images/clu_properties/tsne5_3d_mli.svg', format='svg')
+            fig_mli30.savefig(os.getcwd() + '/images/clu_properties/tsne30_3d_mli.svg', format='svg')
+            fig_mli50.savefig(os.getcwd() + '/images/clu_properties/tsne50_3d_mli.svg', format='svg')
+            fig_mli_hist.savefig(os.getcwd() + '/images/clu_properties/mli_tc_hist.svg', format='svg')
+    else:
+        plt.show()   
+
 
 def fr_anal(fr_data, kmclusters_idx, saveplot=False):
     """ Compute mean relationship between pre and post firing rates
@@ -571,6 +850,7 @@ def mli_anal(mli_data, all_data, kmclu_data, saveplot=False):
     ac_data_norm = ac_data.sub(ac_data.mean(axis=1), axis=0).div(ac_data.std(axis=1), axis=0)
 
     # Plot attributes
+    pdb.set_trace()
     lcolor = 'darkgoldenrod'
     style = 'italic'
     figsize = (14, 12)          # for single unit tc plot! 
@@ -668,6 +948,7 @@ def run_clu_properties(cgs=2,
                        discard=False,
                        pethdiscard=True,
                        window_ac=200,
+                       varexp=70,
                        save_data=False,
                        save_plot=False):
     """ Function to collect properties of all good clusters
@@ -686,9 +967,14 @@ def run_clu_properties(cgs=2,
 
     # Save all data in df
     if save_data:
-        fr_alltime_all = pd.DataFrame()
+        fr_nowhisk_all = pd.DataFrame()
         fr_prepost_whisk_all = pd.DataFrame()
         df_autocorr_all = pd.DataFrame()
+        df_isi_mean_all = pd.DataFrame()
+        df_isi_median_all = pd.DataFrame()
+        df_isi_mode_all = pd.DataFrame()
+        df_isi_std_all = pd.DataFrame()
+        df_isi_logcv_all = pd.DataFrame()
         cids_sorted_all = pd.DataFrame()
         depth_sorted_all = pd.DataFrame()
 
@@ -713,7 +999,7 @@ def run_clu_properties(cgs=2,
                                                                       cortex_depth[rec_idx],
                                                                       binl=frm_len,
                                                                       discard=discard)
-            # Same for spk train ins msec
+            # Same for spk train in msec
             spktr_sorted_msec, __, __ = spkcount_cortex(spktr_sorted_msec,
                                                         spk.sortedDepth,
                                                         __,
@@ -727,7 +1013,8 @@ def run_clu_properties(cgs=2,
                 depth_sorted = np.delete(depth_sorted, pethdiscard_idx[rec_idx])
 
             # Compute fr for all recording
-            fr_alltime = fr_count_alltime(spktr_sorted,
+            fr_nowhisk = fr_count_alltime(spktr_sorted,
+                                          whiskd.iswhisking[int(whisker[-1])],
                                           sr=299)
 
             # Compute fr sorted by whisking/no-whisking periods, pre/post drug application
@@ -736,17 +1023,29 @@ def run_clu_properties(cgs=2,
                                         t_drop[rec_idx],
                                         sr=299)
 
-
+            # Compute autocorrelogram for each cluster
             df_autocorr = clu_autocorr(spktr_sorted_msec, window_ac)
 
+            # Compute properties isi
+            df_isi_mean, df_isi_median, df_isi_mode, df_isi_std, df_isi_logcv = isi_calc(spktr_sorted_msec)
+
             # Save in comprehensive df
-            pdb.set_trace()
-            fr_alltime = pd.concat([fr_alltime], keys=[f'{idx}'], names=['rec'], axis=0)
-            fr_alltime = pd.concat([fr_alltime], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            fr_nowhisk = pd.concat([fr_nowhisk], keys=[f'{idx}'], names=['rec'], axis=0)
+            fr_nowhisk = pd.concat([fr_nowhisk], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
             fr_prepost_whisk = pd.concat([fr_prepost_whisk], keys=[f'{idx}'], names=['rec'], axis=0)
             fr_prepost_whisk = pd.concat([fr_prepost_whisk], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
             df_autocorr = pd.concat([df_autocorr], keys=[f'{idx}'], names=['rec'], axis=0)
             df_autocorr = pd.concat([df_autocorr], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            df_isi_mean = pd.concat([df_isi_mean], keys=[f'{idx}'], names=['rec'], axis=0)
+            df_isi_mean = pd.concat([df_isi_mean], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            df_isi_median = pd.concat([df_isi_median], keys=[f'{idx}'], names=['rec'], axis=0)
+            df_isi_median = pd.concat([df_isi_median], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            df_isi_mode = pd.concat([df_isi_mode], keys=[f'{idx}'], names=['rec'], axis=0)
+            df_isi_mode = pd.concat([df_isi_mode], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            df_isi_std = pd.concat([df_isi_std], keys=[f'{idx}'], names=['rec'], axis=0)
+            df_isi_std = pd.concat([df_isi_std], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
+            df_isi_logcv = pd.concat([df_isi_logcv], keys=[f'{idx}'], names=['rec'], axis=0)
+            df_isi_logcv = pd.concat([df_isi_logcv], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
             cids_sorted = pd.DataFrame(cids_sorted)
             cids_sorted.index.names = ['clu']
             cids_sorted.columns.names = ['clu_id']
@@ -757,21 +1056,35 @@ def run_clu_properties(cgs=2,
             depth_sorted.columns.names = ['clu_id']
             depth_sorted = pd.concat([depth_sorted], keys=[f'{idx}'], names=['rec'], axis=0)
             depth_sorted = pd.concat([depth_sorted], keys=[f'{conditions[rec_idx]}'], names=['cond'], axis=0)
-            fr_alltime_all = pd.concat([fr_alltime_all, fr_alltime], axis=0)
+            fr_nowhisk_all = pd.concat([fr_nowhisk_all, fr_nowhisk], axis=0)
             fr_prepost_whisk_all = pd.concat([fr_prepost_whisk_all, fr_prepost_whisk], axis=0)
             df_autocorr_all = pd.concat([df_autocorr_all, df_autocorr], axis=0)
+            df_isi_mean_all = pd.concat([df_isi_mean_all, df_isi_mean], axis=0)
+            df_isi_median_all = pd.concat([df_isi_median_all, df_isi_median], axis=0)
+            df_isi_mode_all = pd.concat([df_isi_mode_all, df_isi_mode], axis=0)
+            df_isi_std_all = pd.concat([df_isi_std_all, df_isi_std], axis=0)
+            df_isi_logcv_all = pd.concat([df_isi_logcv_all, df_isi_logcv], axis=0)
             cids_sorted_all = pd.concat([cids_sorted_all, cids_sorted], axis=0)
             depth_sorted_all = pd.concat([depth_sorted_all, depth_sorted], axis=0)
 
         pdb.set_trace()
         # Re-label control
-        fr_alltime_all = fr_alltime_all.rename({'aPBS':'control', 'wCNO':'control'})
+        fr_nowhisk_all = fr_nowhisk_all.rename({'aPBS':'control', 'wCNO':'control'})
         fr_prepost_whisk_all = fr_prepost_whisk_all.rename({'aPBS':'control', 'wCNO':'control'})
         df_autocorr_all = df_autocorr_all.rename({'aPBS':'control', 'wCNO':'control'})
+        df_isi_mean_all = df_isi_mean_all.rename({'aPBS':'control', 'wCNO':'control'})
+        df_isi_median_all = df_isi_median_all.rename({'aPBS':'control', 'wCNO':'control'})
+        df_isi_mode_all = df_isi_mode_all.rename({'aPBS':'control', 'wCNO':'control'})
+        df_isi_std_all = df_isi_std_all.rename({'aPBS':'control', 'wCNO':'control'})
+        df_isi_logcv_all = df_isi_logcv_all.rename({'aPBS':'control', 'wCNO':'control'})
         cids_sorted_all = cids_sorted_all.rename({'aPBS':'control', 'wCNO':'control'})
         depth_sorted_all = depth_sorted_all.rename({'aPBS':'control', 'wCNO':'control'})
+
+        # Reduce autocorrelograms (only for control data)
+        df_autocorr_pc, egnvec = autocorr_pca(df_autocorr_all, varexp=varexp)
+
         
-        clu_properties_data = {'fr_alltime': fr_alltime_all, 'fr': fr_prepost_whisk_all, 'autocorr': df_autocorr_all, 'cids': cids_sorted_all, 'depth': depth_sorted_all}
+        clu_properties_data = {'fr_nowhisk': fr_nowhisk_all, 'fr': fr_prepost_whisk_all, 'autocorr': df_autocorr_all, 'autocorr_pc': df_autocorr_pc, 'acorr_egnvec':egnvec, 'isi_mean': df_isi_mean_all, 'isi_median': df_isi_median_all, 'isi_mode': df_isi_mode_all, 'isi_std': df_isi_std_all, 'isi_logcv': df_isi_logcv_all, 'cids': cids_sorted_all, 'depth': depth_sorted_all}
 
         # Save data
         with open('/home/yq18021/Documents/github_gcl/data_analysis/save_data/clu_properties_data.pickle', 'wb') as f:
@@ -783,122 +1096,126 @@ def run_clu_properties(cgs=2,
             clu_properties_data = pickle.load(f)
 
     pdb.set_trace()
-    # Load kcluster data
-    with open('/home/yq18021/Documents/github_gcl/data_analysis/save_data/km_clustered_data_pre.pickle', 'rb') as f:
-        kmclusters = pickle.load(f)
-    # Load MLI data (control only)
-    with open('/home/yq18021/Documents/github_gcl/data_analysis/save_data/mli_data.pickle', 'rb') as f:
-        all_data_mli = pickle.load(f)
 
-    pdb.set_trace()
+    # t-SNE on cluster properties
+    reduce_prop(clu_properties_data, mli_depth, good_list, saveplot=save_plot)
+    
+    # # Load kcluster data
+    # with open('/home/yq18021/Documents/github_gcl/data_analysis/save_data/km_clustered_data_pre.pickle', 'rb') as f:
+    #     kmclusters = pickle.load(f)
+    # # Load MLI data (control only)
+    # with open('/home/yq18021/Documents/github_gcl/data_analysis/save_data/mli_data.pickle', 'rb') as f:
+    #     all_data_mli = pickle.load(f)
 
-    idxsli = pd.IndexSlice
-    kmclusters6 = kmclusters.loc[idxsli['6', :, :, :, :]].copy()
-    kmclusters8 = kmclusters.loc[idxsli['8', :, :, :, :]].copy()
+    # pdb.set_trace()
 
-    mask_wCNO = conditions[good_list] == 'wCNO'
-    mask_aPBS = conditions[good_list] == 'aPBS'
-    idx_wCNO = np.arange(len(good_list))[mask_wCNO]
-    idx_aPBS = np.arange(len(good_list))[mask_aPBS]
+    # idxsli = pd.IndexSlice
+    # kmclusters6 = kmclusters.loc[idxsli['6', :, :, :, :]].copy()
+    # kmclusters8 = kmclusters.loc[idxsli['8', :, :, :, :]].copy()
 
-    # Firing rate analisy (+ plot and save figures)
-    fr_anal_oldcontr(clu_properties_data['fr'], kmclusters8, idx_wCNO, idx_aPBS, saveplot=save_plot)
-    pdb.set_trace()
+    # mask_wCNO = conditions[good_list] == 'wCNO'
+    # mask_aPBS = conditions[good_list] == 'aPBS'
+    # idx_wCNO = np.arange(len(good_list))[mask_wCNO]
+    # idx_aPBS = np.arange(len(good_list))[mask_aPBS]
 
-    # Firing rate analisy (+ plot and save figures)
-    fr_anal(clu_properties_data['fr'], kmclusters8, saveplot=save_plot)
-    pdb.set_trace()
+    # # Firing rate analisy (+ plot and save figures)
+    # fr_anal_oldcontr(clu_properties_data['fr'], kmclusters8, idx_wCNO, idx_aPBS, saveplot=save_plot)
+    # pdb.set_trace()
 
-    # Km clusters of autocorrelation
-    km_autocorr_anal(clu_properties_data['autocorr'], kmclusters8, saveplot=save_plot)
+    # # Firing rate analisy (+ plot and save figures)
+    # fr_anal(clu_properties_data['fr'], kmclusters8, saveplot=save_plot)
+    # pdb.set_trace()
+
+    # # Km clusters of autocorrelation
+    # km_autocorr_anal(clu_properties_data['autocorr'], kmclusters8, saveplot=save_plot)
 
     
-    # Fr-position analysis
-    frpos_anal(clu_properties_data, kmclusters8, saveplot=save_plot)
+    # # Fr-position analysis
+    # frpos_anal(clu_properties_data, kmclusters8, saveplot=save_plot)
     
-    # MLI analysis
-    mli_anal(all_data_mli, clu_properties_data, kmclusters8, saveplot=save_plot)
+    # # MLI analysis
+    # mli_anal(all_data_mli, clu_properties_data, kmclusters8, saveplot=save_plot)
 
 
 
 
 
     
-    # gcolors = kmclusters6[0].map({0:'blue', 1:'red', 2:'green', 3:'violet', 4:'yellow', 5:'pink', 6:'brown', 7:'black', 8:'cyan'})
-    gcolors = kmclusters8[0].map({0:'blue', 1:'red', 2:'green', 3:'violet', 4:'yellow', 5:'pink', 6:'brown', 7:'black', 8:'cyan'})
+    # # gcolors = kmclusters6[0].map({0:'blue', 1:'red', 2:'green', 3:'violet', 4:'yellow', 5:'pink', 6:'brown', 7:'black', 8:'cyan'})
+    # gcolors = kmclusters8[0].map({0:'blue', 1:'red', 2:'green', 3:'violet', 4:'yellow', 5:'pink', 6:'brown', 7:'black', 8:'cyan'})
 
-    # Analyse autocorrelation
-    df_ac = clu_properties_data['autocorr']
-    df_ac['kmclu'] = kmclusters.loc[idxsli['8', :, :, :]].values
-    df_ac.set_index('kmclu', append=True, inplace=True)
+    # # Analyse autocorrelation
+    # df_ac = clu_properties_data['autocorr']
+    # df_ac['kmclu'] = kmclusters.loc[idxsli['8', :, :, :]].values
+    # df_ac.set_index('kmclu', append=True, inplace=True)
 
-    __ = df_ac.copy()
-    __ = __.reset_index()
-    __ = __.melt(id_vars=['cond', 'rec', 'clu', 'kmclu'])
+    # __ = df_ac.copy()
+    # __ = __.reset_index()
+    # __ = __.melt(id_vars=['cond', 'rec', 'clu', 'kmclu'])
 
-    fig, ax = plt.subplots(2, 4, figsize=(14, 12))
-    for idx_kmsclu in range(8):
-        ___ = __[(__.kmclu==idx_kmsclu) & (__.cond=='control')]
-        sns.lineplot(data=___, x='lag', y='value', errorbar='sd', ax=ax.flatten()[idx_kmsclu])
-        # sns.lineplot(data=___, x='lag', y='value', hue='cond', hue_order=['gCNO', 'control'], errorbar='sd', ax=ax.flatten()[idx_kmsclu])
-        ax.flatten()[idx_kmsclu].get_legend().remove()
-    anal_ac(df_ac)
-    # fig = plt.figure()
-    # subfig = fig.subfigures(2)
-    # for idx_cond, cond in ['gCNO', 'control']:
-    #     ax = subfig.subplots(2, 2)
-    #     __ = clu_properties_data['fr'].loc[idxsli[cond, :, :]]
-    #     for idx_ax, axis in enumerate(ax.flatten()):
-    #         __ = __.iloc[:, idx_ax]
+    # fig, ax = plt.subplots(2, 4, figsize=(14, 12))
+    # for idx_kmsclu in range(8):
+    #     ___ = __[(__.kmclu==idx_kmsclu) & (__.cond=='control')]
+    #     sns.lineplot(data=___, x='lag', y='value', errorbar='sd', ax=ax.flatten()[idx_kmsclu])
+    #     # sns.lineplot(data=___, x='lag', y='value', hue='cond', hue_order=['gCNO', 'control'], errorbar='sd', ax=ax.flatten()[idx_kmsclu])
+    #     ax.flatten()[idx_kmsclu].get_legend().remove()
+    # anal_ac(df_ac)
+    # # fig = plt.figure()
+    # # subfig = fig.subfigures(2)
+    # # for idx_cond, cond in ['gCNO', 'control']:
+    # #     ax = subfig.subplots(2, 2)
+    # #     __ = clu_properties_data['fr'].loc[idxsli[cond, :, :]]
+    # #     for idx_ax, axis in enumerate(ax.flatten()):
+    # #         __ = __.iloc[:, idx_ax]
 
-    pdb.set_trace()
+    # pdb.set_trace()
         
     
-    fig, ax = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(14, 12))
-    for idx_cond, cond in enumerate(['gCNO', 'control']):
-        # Data
-        whisk_data = clu_properties_data['fr'].loc[idxsli[cond, :, :], ['pre_whisk', 'post_whisk']]
-        nowhisk_data = clu_properties_data['fr'].loc[idxsli[cond, :, :], ['pre_nowhisk', 'post_nowhisk']]
-        # Plot
-        ax[idx_cond, 0].scatter(whisk_data.iloc[:, 0], whisk_data.iloc[:, 1], c=gcolors.loc[idxsli[cond, :, :]])
-        ax[idx_cond, 0].plot([0, 200], [0, 200], '--', linewidth=3, c='gray')
-        ax[idx_cond, 0].plot(np.arange(0, 200), predict[idx_cond][0], linewidth=3, c='gray')
-        # ax[idx_cond, 0].plot(np.arange(0, 200), linefit.loc[:, idxsli[f'whisk{cond}']], linewidth=3, c='gray')
-        ax[idx_cond, 0].set_aspect('equal', adjustable='box')
-        ax[idx_cond, 1].scatter(nowhisk_data.iloc[:, 0], nowhisk_data.iloc[:, 1], c=gcolors.loc[idxsli[cond, :, :]])
-        ax[idx_cond, 1].plot([0, 200], [0, 200], '--', linewidth=3, c='gray')
-        ax[idx_cond, 1].plot(np.arange(0, 200), predict[idx_cond][1], linewidth=3, c='gray')
-        # ax[idx_cond, 1].plot(np.arange(0, 200), linefit.loc[:, idxsli[f'nowhisk{cond}']], linewidth=3, c='gray')
-        ax[idx_cond, 1].set_aspect('equal', adjustable='box')
+    # fig, ax = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(14, 12))
+    # for idx_cond, cond in enumerate(['gCNO', 'control']):
+    #     # Data
+    #     whisk_data = clu_properties_data['fr'].loc[idxsli[cond, :, :], ['pre_whisk', 'post_whisk']]
+    #     nowhisk_data = clu_properties_data['fr'].loc[idxsli[cond, :, :], ['pre_nowhisk', 'post_nowhisk']]
+    #     # Plot
+    #     ax[idx_cond, 0].scatter(whisk_data.iloc[:, 0], whisk_data.iloc[:, 1], c=gcolors.loc[idxsli[cond, :, :]])
+    #     ax[idx_cond, 0].plot([0, 200], [0, 200], '--', linewidth=3, c='gray')
+    #     ax[idx_cond, 0].plot(np.arange(0, 200), predict[idx_cond][0], linewidth=3, c='gray')
+    #     # ax[idx_cond, 0].plot(np.arange(0, 200), linefit.loc[:, idxsli[f'whisk{cond}']], linewidth=3, c='gray')
+    #     ax[idx_cond, 0].set_aspect('equal', adjustable='box')
+    #     ax[idx_cond, 1].scatter(nowhisk_data.iloc[:, 0], nowhisk_data.iloc[:, 1], c=gcolors.loc[idxsli[cond, :, :]])
+    #     ax[idx_cond, 1].plot([0, 200], [0, 200], '--', linewidth=3, c='gray')
+    #     ax[idx_cond, 1].plot(np.arange(0, 200), predict[idx_cond][1], linewidth=3, c='gray')
+    #     # ax[idx_cond, 1].plot(np.arange(0, 200), linefit.loc[:, idxsli[f'nowhisk{cond}']], linewidth=3, c='gray')
+    #     ax[idx_cond, 1].set_aspect('equal', adjustable='box')
 
-        ax[idx_cond, 0].set_title('whisking')
-        ax[idx_cond, 1].set_title('no-whisking')
-        ax[idx_cond, 0].set_ylabel(f'{cond}_post')
-        ax[idx_cond, 1].set_ylabel(f'{cond}_post')
-        ax[idx_cond, 1].set_xlabel(f'{cond}_pre')
-        ax[idx_cond, 1].set_xlabel(f'{cond}_pre')
+    #     ax[idx_cond, 0].set_title('whisking')
+    #     ax[idx_cond, 1].set_title('no-whisking')
+    #     ax[idx_cond, 0].set_ylabel(f'{cond}_post')
+    #     ax[idx_cond, 1].set_ylabel(f'{cond}_post')
+    #     ax[idx_cond, 1].set_xlabel(f'{cond}_pre')
+    #     ax[idx_cond, 1].set_xlabel(f'{cond}_pre')
 
-        # ax[idx_cond, 0].set_aspect('equal', 'box')
-        # ax[idx_cond, 1].set_aspect('equal', 'box')
-    aa = clu_properties_data['autocorr'].loc['control'].copy()
-    aa['kmclu'] = kmclusters.loc[idxsli['8', 'control', :, :,]].values
-    aa = aa.set_index('kmclu', append=True)
-    aa_norm = []
-    for kmclu in range(8):
-        __ = aa.loc[idxsli[:, :, kmclu]].copy()
-        __ = __.sub(__.mean(axis=1), axis=0).div(__.std(axis=1), axis=0)
-        __ = pd.concat([__], keys=[f'{kmclu}'], names=['kmclu'])
-        aa_norm.append(__)
-    aa_norm = pd.concat(aa_norm)
-    aa_norm = aa_norm.reset_index().melt(id_vars=['kmclu', 'rec', 'clu'])
+    #     # ax[idx_cond, 0].set_aspect('equal', 'box')
+    #     # ax[idx_cond, 1].set_aspect('equal', 'box')
+    # aa = clu_properties_data['autocorr'].loc['control'].copy()
+    # aa['kmclu'] = kmclusters.loc[idxsli['8', 'control', :, :,]].values
+    # aa = aa.set_index('kmclu', append=True)
+    # aa_norm = []
+    # for kmclu in range(8):
+    #     __ = aa.loc[idxsli[:, :, kmclu]].copy()
+    #     __ = __.sub(__.mean(axis=1), axis=0).div(__.std(axis=1), axis=0)
+    #     __ = pd.concat([__], keys=[f'{kmclu}'], names=['kmclu'])
+    #     aa_norm.append(__)
+    # aa_norm = pd.concat(aa_norm)
+    # aa_norm = aa_norm.reset_index().melt(id_vars=['kmclu', 'rec', 'clu'])
 
-    fig, ax = plt.subplots(2, 4)
-    axis = ax.flatten()
-    for kmclu in range(8):
-        __ = aa_norm[aa_norm.kmclu==f'{kmclu}']
-        sns.lineplot(data=__, x='lag', y='value', errorbar='sd', ax=axis[kmclu])
+    # fig, ax = plt.subplots(2, 4)
+    # axis = ax.flatten()
+    # for kmclu in range(8):
+    #     __ = aa_norm[aa_norm.kmclu==f'{kmclu}']
+    #     sns.lineplot(data=__, x='lag', y='value', errorbar='sd', ax=axis[kmclu])
 
-    aa.reset_index().melt(id_vars=['rec', 'clu', 'kmclu'])
+    # aa.reset_index().melt(id_vars=['rec', 'clu', 'kmclu'])
 
 
 if __name__ == '__main__':
@@ -911,8 +1228,9 @@ if __name__ == '__main__':
     discard = False             # False: do not discard clusters based on fr (better not)
     pethdiscard = True          # True: discard based on bad peth (used)
     window_ac = 200             # Window autocorrelation (in ms)
+    varexp = 70                 # %var explained by retained egnvec of autocorrelogram
     save_data = False           # Either compute and save data or load
-    save_plot = False
+    save_plot = True
 
     run_clu_properties(cgs=cgs,
                        var=var,
@@ -921,5 +1239,6 @@ if __name__ == '__main__':
                        discard=discard,
                        pethdiscard=pethdiscard,
                        window_ac=window_ac,
+                       varexp=varexp,
                        save_data=save_data,
                        save_plot=save_plot)

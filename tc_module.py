@@ -1783,6 +1783,10 @@ def run_tc(drop_rec=[0, 10, 15, 16, 25],
             
             label_mean_tc_row = pd.concat([label_mean_tc_row, __])
 
+        # Save df of row tc with k-means labels for clu_properties.py
+        with open(f'/home/yq18021/Documents/github_gcl/data_analysis/save_data/tc_labeled_control.pickle', 'wb') as f:
+            pickle.dump(label_mean_tc_row, f)
+
 
         # DataFrame of shuffled data with same k-means labels
         mean_tc_shuffle = pd.DataFrame()
